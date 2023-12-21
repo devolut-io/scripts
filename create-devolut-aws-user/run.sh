@@ -10,17 +10,17 @@ if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ] || [ -z "$AWS_
     exit 1
 fi
 
-docker run -d -i --name infra_tooling \
+docker run -d -i --rm --name infra_tooling \
     -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
     -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
     -e AWS_DEFAULT_REGION=$AWS_DEFAULT_REGION \
     devolut/infra-tooling bin/bash
 
-docker exec -it infra_tooling apk add --no-cache git
-docker exec -it infra_tooling git clone https://github.com/devolut-io/scripts.git /tmp/scripts
-docker exec -it -w /tmp/scripts/create-devolut-aws-user infra_tooling bash create_user.sh
+docker exec -it infra_tooling \
+    git clone https://github.com/devolut-io/scripts.git /tmp/scripts
+docker exec -it -w /tmp/scripts/create-devolut-aws-user infra_tooling \
+    bash create_user.sh
 
 docker stop infra_tooling
-docker rm infra_tooling
 
-echo "Script execution completed. Thank you for your time."
+echo "Script execution completed successfully."
