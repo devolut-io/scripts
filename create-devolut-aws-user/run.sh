@@ -18,7 +18,7 @@ docker run -d -i --name infra_tooling \
 
 docker exec -it infra_tooling apk add --no-cache git
 docker exec -it infra_tooling git clone https://github.com/devolut-io/scripts.git /tmp/scripts
-docker exec -it -w /tmp/scripts infra_tooling bash create-devolut-aws-user/create_user.sh
+docker exec -it -w /tmp/scripts/create-devolut-aws-user infra_tooling bash create_user.sh
 
 docker stop infra_tooling
 docker rm infra_tooling
