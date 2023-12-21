@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 if ! command -v docker &> /dev/null; then
     echo "Docker is not installed. Please install Docker and run this script again (installation steps: https://docs.docker.com/engine/install/)"
     exit 1
