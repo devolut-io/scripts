@@ -1,30 +1,61 @@
 {
-    "Version": "2012-10-17",
-    "Statement": [
-      {
-        "Effect": "Allow",
-        "Action": [
-          "ec2:Describe*",
-          "ec2:Get*",
-          "ec2:List*"
-        ],
-        "Resource": "*"
-      },
-      {
-        "Effect": "Allow",
-        "Action": [
-          "iam:ChangePassword"
-        ],
-        "Resource": [
-          "arn:aws:iam::*:user/${aws:username}"
-        ]
-      },
-      {
-        "Effect": "Allow",
-        "Action": [
-          "iam:GetAccountPasswordPolicy"
-        ],
-        "Resource": "*"
-      }
-    ]
- }
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:Describe*",
+        "ec2:Get*",
+        "ec2:List*",
+        "autoscaling:Describe*",
+        "autoscaling:Get*",
+        "elasticloadbalancing:Describe*",
+        "appconfig:Get*",
+        "appconfig:List*",
+        "ssm:Describe*",
+        "ssm:Get*",
+        "ssm:List*",
+        "rds:Describe*",
+        "rds:Download*",
+        "sqs:Get*",
+        "sqs:List*",
+        "kms:Describe*",
+        "kms:Get*",
+        "kms:List*",
+        "tag:Get*",
+        "tag:Describe*",
+        "elasticache:Describe*",
+        "elasticache:List*",
+        "eks:Describe*",
+        "eks:List*",
+        "eks:AccessKubernetesApi*",
+        "ecs:Describe*",
+        "ecs:List*",
+        "ecs:Get*",
+        "route53:Get*",
+        "route53:List*",
+        "route53:TestDNSAnswer*",
+        "cloudwatch:Describe*",
+        "cloudwatch:List*",
+        "cloudwatch:Get*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "iam:ChangePassword"
+      ],
+      "Resource": [
+        "arn:aws:iam::*:user/${aws:username}"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetAccountPasswordPolicy"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
