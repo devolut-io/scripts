@@ -47,14 +47,18 @@ deploy_to_k8s() {
     CLUSTER=$4
     ENVIRONMENT=$5
 
-    # Sets parsed yaml key-value variables with a prefix CONF_ 
+    # Sets parsed yaml key-value variables with a prefix CONF_
     eval $(parse_yaml configs/pandora/dk/env.yaml "CONF_")
 
+    # moze one liner: export VAULT_ADDR=$CONF_vault_endpoint
     VAULT_ADDR=$CONF_vault_endpoint
     export VAULT_ADDR
+    # ovo treba preko prompt-a
     export VAULT_TOKEN  # FROM INLINE COMMAND
 
     # Gets AWS credentials from Vault
+
+    # ovo moze direktno u env vars
     CONF_AWS_ACCESS_KEY_ID=$(vault kv get -field=AWS_ACCESS_KEY_ID -mount="tool-test" aws)
     CONF_AWS_SECRET_ACCESS_KEY=$(vault kv get -field=AWS_SECRET_ACCESS_KEY -mount="tool-test" aws)
 
@@ -67,8 +71,8 @@ deploy_to_k8s() {
 
     case "$PROJECT_NAME" in
         "pandora") # TBD
-        REGION=$CONF_app_REGION
-        COUNTRY=$CONF_app_COUNTRY
+        REGION=$CONF_app_region
+        COUNTRY=$CONF_app_country
         IMAGE_TAG="sha-{BITBUCKET_COMMIT::7}" # TBD
             case "$ENVIRONMENT" in
             "staging")
