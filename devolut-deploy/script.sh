@@ -2,26 +2,6 @@
 
 # Command for calling the script: `d deploy pandora dk production`
 
-# Prompt for Vault token
-# "Enter Vault token (https://vault.lokalflirt.dk): "
-
-# Load config file variables (e.g. `source configs/pandora/dk/env.yaml`)
-# `source` probably doesn't work with yaml, find some way to use yaml but load the variables
-# so bash can use them - if it's not straightforward skip this for now (write them in format <key>=<value>
-
-# Read AWS credentials from Vault (vault endpoint specified in config file)
-# vault kv get -field=AWS_ACCESS_KEY_ID -mount="tool-test" aws
-
-# Check whether kubeconfig for the specified cluster exists (for start just grep `cluster_name` in ~/.kube/config)
-    # if not, generate kubeconf using awscli
-
-# Prompt for image tag
-# "Enter image tag: "
-
-# Mock helmfile deployment (just echo the command which will be used)
-
-
-
 parse_yaml() {
    local prefix=$2
    local s='[[:space:]]*' w='[a-zA-Z0-9_]*' fs=$(echo @|tr @ '\034')
@@ -38,68 +18,89 @@ parse_yaml() {
       }
    }'
 }
+exit_on_error() {
+    exit_code=$1
+    message=$2
 
+    if [ $exit_code -ne 0 ]; then
+        echo "$message"
+        exit 1
+    fi
+}
+get_vault_secrets() {
+    # Sets parsed yaml key-value variables with a prefix CONF_
+    eval $(parse_yaml configs/pandora/dk/env.yaml "CONF_")
+
+    export VAULT_ADDR=$CONF_vault_endpoint
+    read -s -p "Enter Vault token: " VAULT_TOKEN
+    export VAULT_TOKEN
+
+    # Gets AWS credentials from Vault
+    AWS_ACCESS_KEY_ID=$(vault kv get -field=AWS_ACCESS_KEY_ID -mount="tool-test" aws)
+    exit_on_error $? "Failed to retrieve AWS_ACCESS_KEY_ID from vault"
+    export AWS_ACCESS_KEY_ID
+
+    AWS_SECRET_ACCESS_KEY=$(vault kv get -field=AWS_SECRET_ACCESS_KEY -mount="tool-test" aws)
+    exit_on_error $? "Failed to retrieve AWS_SECRET_ACCESS_KEY from vault"
+    export AWS_SECRET_ACCESS_KEY
+}
 
 deploy_to_k8s() {
     HELMFILE=$1
     ACTION=$2
     PROJECT_NAME=$3
-    CLUSTER=$4
+    COUNTRY=$4
     ENVIRONMENT=$5
 
-    # Sets parsed yaml key-value variables with a prefix CONF_
-    eval $(parse_yaml configs/pandora/dk/env.yaml "CONF_")
-
-    # moze one liner: export VAULT_ADDR=$CONF_vault_endpoint
-    VAULT_ADDR=$CONF_vault_endpoint
-    export VAULT_ADDR
-    # ovo treba preko prompt-a
-    export VAULT_TOKEN  # FROM INLINE COMMAND
-
-    # Gets AWS credentials from Vault
-
-    # ovo moze direktno u env vars
-    CONF_AWS_ACCESS_KEY_ID=$(vault kv get -field=AWS_ACCESS_KEY_ID -mount="tool-test" aws)
-    CONF_AWS_SECRET_ACCESS_KEY=$(vault kv get -field=AWS_SECRET_ACCESS_KEY -mount="tool-test" aws)
-
-    if [ $? -eq 0 ]; then
-        echo "Vault secrets retrieved successfully"
-    else
-        echo "Failed to retrieve secrets from vault"
-        exit 1
-    fi
+    get_vault_secrets
 
     case "$PROJECT_NAME" in
-        "pandora") # TBD
+        "pandora")
         REGION=$CONF_app_region
-        COUNTRY=$CONF_app_country
-        IMAGE_TAG="sha-{BITBUCKET_COMMIT::7}" # TBD
+
+        while true; do
+            read -p "Enter Image Tag: " IMAGE_TAG
+            if [ -z "$IMAGE_TAG" ]; then
+                echo "Image Tag cannot be empty. Please enter a valid tag."
+            else
+                export IMAGE_TAG
+                break
+            fi
+        done
+
+        case "$COUNTRY" in 
+            "dk")
             case "$ENVIRONMENT" in
-            "staging")
-                # Check config before switching
-                aws configure set aws_access_key_id $CONF_AWS_ACCESS_KEY_ID
-                aws configure set aws_secret_access_key $CONF_AWS_SECRET_ACCESS_KEY
-                aws eks update-kubeconfig --name "${REGION}-eks" --region $CONF_aws_region
-                kubectl get pod -A
-                echo "helmfile -e $ENVIRONMENT -f k8s/helmfile.${HELMFILE} $ACTION"
-            ;;
-            "production")
-                aws configure set aws_access_key_id $CONF_AWS_ACCESS_KEY_ID
-                aws configure set aws_secret_access_key $CONF_AWS_SECRET_ACCESS_KEY
-                aws eks update-kubeconfig --name "${REGION}-eks" --region $CONF_aws_region
-                echo "helmfile -e $ENVIRONMENT -f k8s/helmfile.${HELMFILE} $ACTION"
-            ;;
-            "dev")
-                aws configure set aws_access_key_id $CONF_AWS_ACCESS_KEY_ID
-                aws configure set aws_secret_access_key $CONF_AWS_SECRET_ACCESS_KEY
-                aws eks update-kubeconfig --name "${REGION}-eks" --region $CONF_aws_region
-                echo "helmfile -e $ENVIRONMENT -f k8s/helmfile.${HELMFILE} $ACTION"
-            ;;
-            *)
-            echo "Unknown environment: $ENVIRONMENT"
-            exit 1
-            ;;
+                "staging"|"production"|"dev")
+
+                    # Checks for context and update it if necessary
+                    if ! grep -q "$CONF_cluster_name" ~/.kube/config; then
+                        echo "Kubeconfig for $CONF_cluster_name does not exist. Generating kubeconfig..."
+                        aws eks update-kubeconfig --name "$CONF_cluster_name" --region $CONF_aws_region
+                        exit_on_error $? "Failed to generate kubeconfig for $CONF_cluster_name"
+                    else
+                        current_context=$(kubectl config current-context)
+                         if [[ ! $current_context == *"$CONF_cluster_name"* ]]; then
+                            echo "Switching to Kubernetes context $CONF_cluster_name"
+                            aws eks update-kubeconfig --name "$CONF_cluster_name" --region $CONF_aws_region
+                            exit_on_error $? "Failed to switch to Kubernetes context $CONF_cluster_name"
+                        fi
+                    fi
+
+                    kubectl get pod -A
+                    echo "helmfile -e $ENVIRONMENT -f k8s/helmfile.${HELMFILE} $ACTION"
+                ;;
+                *)
+                    echo "Unknown environment: $ENVIRONMENT"
+                    exit 1
+                ;;
             esac
+        ;;
+            *)
+            echo "Unknown country: $COUNTRY"
+            exit 1
+        ;;
+        esac
     ;;
         *)
         echo "Unknown project: $PROJECT_NAME"
@@ -107,9 +108,8 @@ deploy_to_k8s() {
     ;;
     esac
 }
-
 if [ "$#" -ne 5 ]; then
-    echo "Usage: $0 <HELMFILE> <ACTION> <PROJECT_NAME> <CLUSTER> <ENVIRONMENT>"
+    echo "Usage: $0 <HELMFILE> <ACTION> <PROJECT_NAME> <COUNTRY> <ENVIRONMENT>"
     exit 1
 fi
 
