@@ -2,6 +2,9 @@
 
 # Command for calling the script: `script.sh pandora dk production`
 
+supported_projects=("pandora")
+supported_countries=("dk")
+
 parse_yaml() {
    local prefix=$2
    local s='[[:space:]]*' w='[a-zA-Z0-9_]*' fs=$(echo @|tr @ '\034')
@@ -49,70 +52,59 @@ get_aws_creds_from_vault() {
     export AWS_SECRET_ACCESS_KEY
 }
 
+check_supported_project_and_country() {
+    local project=$1
+    local country=$2
+
+    if [[ ! " ${supported_projects[*]} " =~ " $project " ]]; then
+        echo "Unknown project: $project"
+        return 1
+    fi
+
+    if [[ ! " ${supported_countries[*]} " =~ " $country " ]]; then
+        echo "Unknown country: $country"
+        return 1
+    fi
+}
+
 deploy_to_k8s() {
     PROJECT_NAME=$1
     COUNTRY=$2
     ENVIRONMENT=$3
+
+    check_supported_project_and_country "$PROJECT_NAME" "$COUNTRY" || exit 1
 
     # Parse yaml config for specific app/country and load it into vars prefixed with CONF_
     eval $(parse_yaml configs/$PROJECT_NAME/$COUNTRY/env.yaml "CONF_")
 
     get_aws_creds_from_vault
 
-    case "$PROJECT_NAME" in
-        "pandora")
-        REGION=$CONF_app_region
+    while true; do
+        read -p "Enter Image Tag: " IMAGE_TAG
+        echo
+        if [ -z "$IMAGE_TAG" ]; then
+            echo "Image Tag cannot be empty. Please enter a valid tag."
+        else
+            export IMAGE_TAG
+            break
+        fi
+    done
+    # Checks for context and update it if necessary
+    if ! grep -q "$CONF_cluster_name" ~/.kube/config; then
+        echo "Kubeconfig for $CONF_cluster_name does not exist. Generating kubeconfig..."
+        aws eks update-kubeconfig --name "$CONF_cluster_name" --region $CONF_aws_region
+        exit_on_error $? "Failed to generate kubeconfig for $CONF_cluster_name"
+    else
+        current_context=$(kubectl config current-context)
+            if [[ ! $current_context == *"$CONF_cluster_name"* ]]; then
+            echo "Switching to Kubernetes context $CONF_cluster_name"
+            aws eks update-kubeconfig --name "$CONF_cluster_name" --region $CONF_aws_region
+            exit_on_error $? "Failed to switch to Kubernetes context $CONF_cluster_name"
+        fi
+    fi
 
-        while true; do
-            read -p "Enter Image Tag: " IMAGE_TAG
-            echo
-            if [ -z "$IMAGE_TAG" ]; then
-                echo "Image Tag cannot be empty. Please enter a valid tag."
-            else
-                export IMAGE_TAG
-                break
-            fi
-        done
-
-        case "$COUNTRY" in
-            "dk")
-            case "$ENVIRONMENT" in
-                "staging"|"production"|"dev")
-
-                    # Checks for context and update it if necessary
-                    if ! grep -q "$CONF_cluster_name" ~/.kube/config; then
-                        echo "Kubeconfig for $CONF_cluster_name does not exist. Generating kubeconfig..."
-                        aws eks update-kubeconfig --name "$CONF_cluster_name" --region $CONF_aws_region
-                        exit_on_error $? "Failed to generate kubeconfig for $CONF_cluster_name"
-                    else
-                        current_context=$(kubectl config current-context)
-                         if [[ ! $current_context == *"$CONF_cluster_name"* ]]; then
-                            echo "Switching to Kubernetes context $CONF_cluster_name"
-                            aws eks update-kubeconfig --name "$CONF_cluster_name" --region $CONF_aws_region
-                            exit_on_error $? "Failed to switch to Kubernetes context $CONF_cluster_name"
-                        fi
-                    fi
-
-                    kubectl get pod -A
-                    echo "helmfile -e $ENVIRONMENT -f k8s/helmfile.d deploy"
-                ;;
-                *)
-                    echo "Unknown environment: $ENVIRONMENT"
-                    exit 1
-                ;;
-            esac
-        ;;
-            *)
-            echo "Unknown country: $COUNTRY"
-            exit 1
-        ;;
-        esac
-    ;;
-        *)
-        echo "Unknown project: $PROJECT_NAME"
-        exit 1
-    ;;
-    esac
+    kubectl get pod -A
+    echo "helmfile -e $ENVIRONMENT -f k8s/helmfile.d deploy"
 }
 if [ "$#" -ne 3 ]; then
     echo "Usage: $0 <PROJECT_NAME> <COUNTRY> <ENVIRONMENT>"
