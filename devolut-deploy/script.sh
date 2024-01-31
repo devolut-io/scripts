@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Command for calling the script: `d deploy pandora dk production`
+# Command for calling the script: `script.sh pandora dk production`
 
 parse_yaml() {
    local prefix=$2
@@ -27,12 +27,10 @@ exit_on_error() {
         exit 1
     fi
 }
-get_vault_secrets() {
-    # Sets parsed yaml key-value variables with a prefix CONF_
-    eval $(parse_yaml configs/pandora/dk/env.yaml "CONF_")
 
+get_aws_creds_from_vault() {
     export VAULT_ADDR=$CONF_vault_endpoint
-    read -s -p "Enter Vault token: " VAULT_TOKEN
+    read -s -p "Enter Vault token ($CONF_vault_endpoint): " VAULT_TOKEN
     export VAULT_TOKEN
 
     # Gets AWS credentials from Vault
@@ -46,13 +44,14 @@ get_vault_secrets() {
 }
 
 deploy_to_k8s() {
-    HELMFILE=$1
-    ACTION=$2
-    PROJECT_NAME=$3
-    COUNTRY=$4
-    ENVIRONMENT=$5
+    PROJECT_NAME=$1
+    COUNTRY=$2
+    ENVIRONMENT=$3
 
-    get_vault_secrets
+    # Parse yaml config for specific app/country and load it into vars prefixed with CONF_
+    eval $(parse_yaml configs/$PROJECT_NAME/$COUNTRY/env.yaml "CONF_")
+
+    get_aws_creds_from_vault
 
     case "$PROJECT_NAME" in
         "pandora")
@@ -68,7 +67,7 @@ deploy_to_k8s() {
             fi
         done
 
-        case "$COUNTRY" in 
+        case "$COUNTRY" in
             "dk")
             case "$ENVIRONMENT" in
                 "staging"|"production"|"dev")
@@ -88,7 +87,7 @@ deploy_to_k8s() {
                     fi
 
                     kubectl get pod -A
-                    echo "helmfile -e $ENVIRONMENT -f k8s/helmfile.${HELMFILE} $ACTION"
+                    echo "helmfile -e $ENVIRONMENT -f k8s/helmfile.d $ACTION"
                 ;;
                 *)
                     echo "Unknown environment: $ENVIRONMENT"
@@ -108,9 +107,9 @@ deploy_to_k8s() {
     ;;
     esac
 }
-if [ "$#" -ne 5 ]; then
-    echo "Usage: $0 <HELMFILE> <ACTION> <PROJECT_NAME> <COUNTRY> <ENVIRONMENT>"
+if [ "$#" -ne 3 ]; then
+    echo "Usage: $0 <PROJECT_NAME> <COUNTRY> <ENVIRONMENT>"
     exit 1
 fi
 
-deploy_to_k8s "$1" "$2" "$3" "$4" "$5"
+deploy_to_k8s $1 $2 $3
