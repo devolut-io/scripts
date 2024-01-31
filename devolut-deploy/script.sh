@@ -30,8 +30,14 @@ exit_on_error() {
 
 get_aws_creds_from_vault() {
     export VAULT_ADDR=$CONF_vault_endpoint
-    read -s -p "Enter Vault token ($CONF_vault_endpoint): " VAULT_TOKEN
-    export VAULT_TOKEN
+
+    if [ -z "$VAULT_TOKEN" ]; then
+        read -s -p "Enter Vault token ($CONF_vault_endpoint): " VAULT_TOKEN
+        echo
+        export VAULT_TOKEN
+    else
+        echo "Using existing Vault token."
+    fi
 
     # Gets AWS credentials from Vault
     AWS_ACCESS_KEY_ID=$(vault kv get -field=AWS_ACCESS_KEY_ID -mount="tool-test" aws)
@@ -59,6 +65,7 @@ deploy_to_k8s() {
 
         while true; do
             read -p "Enter Image Tag: " IMAGE_TAG
+            echo
             if [ -z "$IMAGE_TAG" ]; then
                 echo "Image Tag cannot be empty. Please enter a valid tag."
             else
@@ -87,7 +94,7 @@ deploy_to_k8s() {
                     fi
 
                     kubectl get pod -A
-                    echo "helmfile -e $ENVIRONMENT -f k8s/helmfile.d $ACTION"
+                    echo "helmfile -e $ENVIRONMENT -f k8s/helmfile.d deploy"
                 ;;
                 *)
                     echo "Unknown environment: $ENVIRONMENT"
