@@ -31,7 +31,7 @@ exit_on_error() {
     fi
 }
 
-get_aws_creds_from_vault() {
+get_and_set_aws_creds_from_vault() {
     export VAULT_ADDR=$CONF_vault_endpoint
 
     if [ -z "$VAULT_TOKEN" ]; then
@@ -84,20 +84,7 @@ read_image_tag() {
     fi
 }
 
-deploy_to_k8s() {
-    PROJECT_NAME=$1
-    COUNTRY=$2
-    ENVIRONMENT=$3
-
-    check_params "$PROJECT_NAME" "$COUNTRY"
-
-    # Parse yaml config for specific app/country and load it into vars prefixed with CONF_
-    eval $(parse_yaml configs/$PROJECT_NAME/$COUNTRY/env.yaml "CONF_")
-
-    get_aws_creds_from_vault
-
-    read_image_tag
-
+generate_and_set_kube_context() {
     mkdir -p ~/devolut/.kube
     KUBECONFIG_PATH=~/devolut/.kube/${CONF_cluster_name}.yaml
 
@@ -110,6 +97,23 @@ deploy_to_k8s() {
     fi
 
     export KUBECONFIG=$KUBECONFIG_PATH
+}
+
+deploy_to_k8s() {
+    PROJECT_NAME=$1
+    COUNTRY=$2
+    ENVIRONMENT=$3
+
+    check_params "$PROJECT_NAME" "$COUNTRY"
+
+    # Parse yaml config for specific app/country and load it into vars prefixed with CONF_
+    eval $(parse_yaml configs/$PROJECT_NAME/$COUNTRY/env.yaml "CONF_")
+
+    get_and_set_aws_creds_from_vault
+
+    generate_and_set_kube_context
+
+    read_image_tag
 
     kubectl get pod -A
     echo "helmfile -e $ENVIRONMENT -f k8s/helmfile.d deploy"
