@@ -98,19 +98,18 @@ deploy_to_k8s() {
 
     read_image_tag
 
-    # Checks for context and update it if necessary
-    if ! grep -q "$CONF_cluster_name" ~/.kube/config; then
-        echo "Kubeconfig for $CONF_cluster_name does not exist. Generating kubeconfig..."
-        aws eks update-kubeconfig --name "$CONF_cluster_name" --region $CONF_aws_region
-        exit_on_error $? "Failed to generate kubeconfig for $CONF_cluster_name"
+    mkdir -p ~/devolut/.kube
+    KUBECONFIG_PATH=~/devolut/.kube/${CONF_cluster_name}.yaml
+
+    if [ ! -f "$KUBECONFIG_PATH" ]; then
+        echo "Kubeconfig for $CONF_cluster_name does not exist. Generating kubeconfig at $KUBECONFIG_PATH..."
+        aws eks update-kubeconfig --name "$CONF_cluster_name" --region $CONF_aws_region --kubeconfig "$KUBECONFIG_PATH"
+        exit_on_error $? "Failed to generate kubeconfig for $CONF_cluster_name at $KUBECONFIG_PATH"
     else
-        current_context=$(kubectl config current-context)
-        if [[ ! $current_context == *"$CONF_cluster_name"* ]]; then
-            echo "Switching to Kubernetes context $CONF_cluster_name"
-            aws eks update-kubeconfig --name "$CONF_cluster_name" --region $CONF_aws_region
-            exit_on_error $? "Failed to switch to Kubernetes context $CONF_cluster_name"
-        fi
+        echo "Using existing kubeconfig for $CONF_cluster_name at $KUBECONFIG_PATH"
     fi
+
+    export KUBECONFIG=$KUBECONFIG_PATH
 
     kubectl get pod -A
     echo "helmfile -e $ENVIRONMENT -f k8s/helmfile.d deploy"
